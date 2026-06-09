@@ -1,8 +1,10 @@
-# Sample Kit
+# SampleKit
 
 An Ableton Live extension that exports arrangement segments between locators as device-ready WAV files.
 
 Right-click an audio track → **Export Locator Samples…** to render pre-FX audio for each locator range and save named samples to your Live project or extension storage.
+
+<img width="1280" height="822" alt="samplkit" src="https://github.com/user-attachments/assets/e372795c-949d-473b-8683-37bc6263b93a" />
 
 ## Requirements
 
