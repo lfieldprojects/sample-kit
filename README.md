@@ -15,7 +15,7 @@ Right-click an audio track → **Export Locator Samples…** to render pre-FX au
 
 No Node.js required.
 
-1. Open [Releases](https://github.com/YOUR_USERNAME/sample-kit/releases) and download the latest `.ablx` file (e.g. `Sample-Kit-0.1.0.ablx`).
+1. Open [Releases](https://github.com/lfieldprojects/sample-kit/releases) and download the latest `.ablx` file (e.g. `Sample-Kit-0.1.0.ablx`).
 2. In Live: **Settings → Extensions**.
 3. Drag the `.ablx` file into the Extensions window.
 4. Right-click an **audio track** in Arrangement View → **Export Locator Samples…**
