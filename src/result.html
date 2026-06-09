@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SampleKit</title>
+  <style>
+__STYLES__
+  </style>
+</head>
+<body>
+  <div class="sk-result-shell">
+    <header class="sk-result-top">
+      <div class="sk-brand-row">
+        <div class="sk-brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/>
+          </svg>
+        </div>
+        <span class="sk-result-brand">SampleKit</span>
+      </div>
+      <button class="sk-close" id="closeBtn" type="button" aria-label="Close">×</button>
+    </header>
+
+    <p class="sk-result-tagline">Export arrangement segments between locators as device-ready WAV files.</p>
+
+    <div class="sk-result-content" id="content">
+      <div class="sk-result-static" id="resultStatic" hidden>
+        <h2 class="sk-result-heading">Export results</h2>
+        <p class="sk-result-summary" id="resultSummary"></p>
+        <div class="sk-result-folder">
+          <p class="sk-result-label" id="folderLabel"></p>
+          <p class="sk-result-path" id="folderPath"></p>
+        </div>
+      </div>
+
+      <section class="sk-result-panel" id="resultPanel" hidden>
+        <div class="sk-result-scroll" id="resultScroll"></div>
+      </section>
+
+      <p class="sk-result-manifest" id="resultManifest" hidden></p>
+      <p class="sk-result-error" id="resultError" hidden></p>
+      <h2 class="sk-result-heading" id="resultHeading" hidden>Export failed</h2>
+    </div>
+  </div>
+
+  <script>
+    const DATA = __INIT_DATA__;
+
+    const isWebKitMessageHandlerAvailable = window.webkit &&
+      window.webkit.messageHandlers &&
+      window.webkit.messageHandlers.live;
+    const isWebView2 = window.chrome && window.chrome.webview;
+
+    function doSendMessage(message) {
+      if (isWebKitMessageHandlerAvailable) {
+        window.webkit.messageHandlers.live.postMessage(message);
+      } else if (isWebView2) {
+        window.chrome.webview.postMessage(message);
+      }
+    }
+
+    function closeDialog() {
+      doSendMessage({ method: "close_and_send", params: [""] });
+    }
+
+    function createCheckIcon() {
+      const icon = document.createElement("span");
+      icon.className = "sk-result-check";
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = '<svg viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 4L3.5 6.5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+      return icon;
+    }
+
+    function appendFileItem(list, name) {
+      const item = document.createElement("li");
+      item.className = "sk-result-file-item";
+      item.appendChild(createCheckIcon());
+      const label = document.createElement("span");
+      label.className = "sk-result-file-name";
+      label.textContent = name;
+      item.appendChild(label);
+      list.appendChild(item);
+    }
+
+    function appendExportsBlock(container, files) {
+      const block = document.createElement("section");
+      block.className = "sk-result-block";
+
+      const heading = document.createElement("h3");
+      heading.className = "sk-result-block-title";
+      heading.textContent = "Files successfully exported";
+      block.appendChild(heading);
+
+      const list = document.createElement("ul");
+      list.className = "sk-result-file-list";
+      for (const file of files) {
+        appendFileItem(list, String(file));
+      }
+      block.appendChild(list);
+      container.appendChild(block);
+    }
+
+    function appendExtraSection(container, section) {
+      const block = document.createElement("section");
+      block.className = "sk-result-extra sk-result-extra--divider";
+      if (section.variant === "warning") {
+        block.classList.add("sk-result-extra--warning");
+      }
+
+      const heading = document.createElement("h3");
+      heading.className = "sk-result-block-title";
+      heading.textContent = section.heading;
+      block.appendChild(heading);
+
+      const list = document.createElement("ul");
+      list.className = "sk-result-extra-list";
+      for (const item of section.items) {
+        const row = document.createElement("li");
+        row.textContent = item;
+        list.appendChild(row);
+      }
+      block.appendChild(list);
+      container.appendChild(block);
+    }
+
+    function showSuccess(data) {
+      document.getElementById("resultStatic").hidden = false;
+      document.getElementById("resultPanel").hidden = false;
+
+      document.getElementById("resultSummary").textContent =
+        `Exported ${data.exported} file(s).`;
+      document.getElementById("folderLabel").textContent = data.folderLabel || "";
+      document.getElementById("folderPath").textContent = data.folderPath || "";
+
+      const scroll = document.getElementById("resultScroll");
+      scroll.textContent = "";
+
+      const files = Array.isArray(data.files) ? data.files : [];
+      appendExportsBlock(scroll, files);
+
+      const extras = Array.isArray(data.extraSections) ? data.extraSections : [];
+      for (const section of extras) {
+        appendExtraSection(scroll, section);
+      }
+
+      if (data.manifestPath) {
+        const manifest = document.getElementById("resultManifest");
+        manifest.hidden = false;
+        manifest.textContent = `Manifest: ${data.manifestPath}`;
+      }
+    }
+
+    function showError(data) {
+      const error = document.getElementById("resultError");
+      const heading = document.getElementById("resultHeading");
+      error.hidden = false;
+      heading.hidden = false;
+      heading.textContent = data.title || "Export failed";
+      error.textContent = data.message || "";
+    }
+
+    function init() {
+      if (DATA && DATA.kind === "success" && DATA.data) {
+        showSuccess(DATA.data);
+      } else {
+        showError(DATA || {});
+      }
+
+      document.getElementById("closeBtn").addEventListener("click", closeDialog);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" || e.key === "Enter") closeDialog();
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

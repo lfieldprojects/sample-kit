@@ -1,0 +1,7 @@
+{
+  "name": "Sample Kit",
+  "author": "Luke Fielding",
+  "entry": "dist/extension.cjs",
+  "version": "0.1.0",
+  "minimumApiVersion": "1.0.0"
+}

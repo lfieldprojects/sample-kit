@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SampleKit</title>
+  <script>
+    const DATA = __INIT_DATA__;
+
+    const isWebKitMessageHandlerAvailable = window.webkit &&
+      window.webkit.messageHandlers &&
+      window.webkit.messageHandlers.live;
+    const isWebView2 = window.chrome && window.chrome.webview;
+
+    function doSendMessage(message) {
+      if (isWebKitMessageHandlerAvailable) {
+        window.webkit.messageHandlers.live.postMessage(message);
+      } else if (isWebView2) {
+        window.chrome.webview.postMessage(message);
+      }
+    }
+
+    function closeWithResult(result) {
+      doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
+    }
+
+    function applyPreset(presetId) {
+      const preset = DATA.presets.find((p) => p.id === presetId);
+      if (!preset) return;
+      const custom = presetId === "custom";
+      document.getElementById("sampleRate").value = String(preset.sampleRate);
+      document.getElementById("bitDepth").value = String(preset.bitDepth);
+      document.getElementById("format").value = preset.format;
+      document.getElementById("sampleRate").disabled = !custom;
+      document.getElementById("bitDepth").disabled = !custom;
+      document.getElementById("format").disabled = !custom;
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function getSegmentInputs() {
+      return [...document.querySelectorAll(".sk-segment-item .sk-check")].filter(
+        (input) => input instanceof HTMLInputElement,
+      );
+    }
+
+    function getSelectedSegmentIds() {
+      return getSegmentInputs()
+        .filter((input) => input.checked && !input.disabled)
+        .map((input) => input.value);
+    }
+
+    function updateSegmentSummary() {
+      const { init } = DATA;
+      const selectable = getSegmentInputs().filter((input) => !input.disabled);
+      const selectedCount = getSelectedSegmentIds().length;
+      const totalCount = init.segmentCount;
+      document.getElementById("meta").textContent =
+        `${selectedCount} of ${totalCount} selected · ${Math.round(init.tempo)}BPM · ${init.keyLabel}`;
+      document.getElementById("segmentSummary").textContent =
+        selectable.length
+          ? `${selectedCount} of ${selectable.length} segments selected`
+          : "No segments available";
+    }
+
+    function updateExportButton() {
+      const blocked = DATA.init.warnings.some((w) =>
+        w.startsWith("Add at least") || w.startsWith("No export segments"),
+      );
+      const selectedCount = getSelectedSegmentIds().length;
+      document.getElementById("exportBtn").disabled =
+        blocked || DATA.init.segmentCount === 0 || selectedCount === 0;
+      updateSegmentSummary();
+    }
+
+    function setAllSegments(checked) {
+      getSegmentInputs().forEach((input) => {
+        if (!input.disabled) input.checked = checked;
+      });
+      updateExportButton();
+    }
+
+    function syncSegmentAvailability() {
+      const exclude = document.getElementById("excludeSectionsWithoutClips").checked;
+      document.querySelectorAll(".sk-segment-item").forEach((row) => {
+        const input = row.querySelector(".sk-check");
+        if (!(input instanceof HTMLInputElement)) return;
+        const hasClips = input.dataset.hasClips === "true";
+        const disabled = exclude && !hasClips;
+        input.disabled = disabled;
+        row.classList.toggle("sk-segment-item--disabled", disabled);
+        if (disabled) input.checked = false;
+      });
+      updateExportButton();
+    }
+
+    function collectOptions() {
+      return {
+        presetId: document.getElementById("preset").value,
+        sampleRate: Number(document.getElementById("sampleRate").value),
+        bitDepth: Number(document.getElementById("bitDepth").value),
+        format: document.getElementById("format").value,
+        destination: document.getElementById("destination").value,
+        excludeSectionsWithoutClips: document.getElementById("excludeSectionsWithoutClips").checked,
+        selectedSegmentIds: getSelectedSegmentIds(),
+      };
+    }
+
+    function exportSamples() {
+      if (document.getElementById("exportBtn").disabled) return;
+      closeWithResult({ action: "export", options: collectOptions() });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const { init } = DATA;
+      document.getElementById("tracks").textContent = init.tracks.join(", ");
+
+      const blockingWarnings = init.warnings.filter((w) =>
+        w.startsWith("Add at least") || w.startsWith("No export segments"),
+      );
+      const alert = document.getElementById("alert");
+      if (blockingWarnings.length) {
+        alert.hidden = false;
+        alert.innerHTML = `<ul>${blockingWarnings.map((w) => `<li>${w}</li>`).join("")}</ul>`;
+      }
+
+      const segmentList = document.getElementById("segmentList");
+      if (!init.segments.length) {
+        segmentList.innerHTML = '<p class="sk-segment-empty">Add locators in Arrangement View to create segments.</p>';
+      } else {
+        segmentList.innerHTML = init.segments
+          .map((segment) => `
+            <label class="sk-segment-item">
+              <input
+                class="sk-check"
+                type="checkbox"
+                value="${escapeHtml(segment.id)}"
+                data-has-clips="${segment.hasClips ? "true" : "false"}"
+                checked
+              >
+              <span>${escapeHtml(segment.name)}</span>
+            </label>
+          `)
+          .join("");
+      }
+
+      document.getElementById("preset").innerHTML = DATA.presets
+        .map((p) => `<option value="${p.id}">${p.label}</option>`)
+        .join("");
+
+      document.getElementById("preset").addEventListener("change", (e) => {
+        applyPreset(e.target.value);
+      });
+
+      document.getElementById("excludeSectionsWithoutClips").addEventListener("change", syncSegmentAvailability);
+      segmentList.addEventListener("change", updateExportButton);
+      document.getElementById("selectAllSegments").addEventListener("click", () => setAllSegments(true));
+      document.getElementById("selectNoSegments").addEventListener("click", () => setAllSegments(false));
+
+      applyPreset("custom");
+      syncSegmentAvailability();
+
+      document.getElementById("exportBtn").addEventListener("click", exportSamples);
+      document.getElementById("cancelBtn").addEventListener("click", () => {
+        closeWithResult({ action: "cancel" });
+      });
+      document.getElementById("closeBtn").addEventListener("click", () => {
+        closeWithResult({ action: "cancel" });
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeWithResult({ action: "cancel" });
+      });
+    });
+  </script>
+  <style>
+__STYLES__
+  </style>
+</head>
+<body>
+  <div class="sk-shell">
+    <aside class="sk-sidebar">
+      <div class="sk-sidebar-inner">
+        <div class="sk-brand">
+          <div class="sk-brand-row">
+            <div class="sk-brand-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/>
+              </svg>
+            </div>
+            <span class="sk-guide-title">SampleKit</span>
+          </div>
+          <p class="sk-guide-text">Export arrangement segments between locators as device-ready WAV files.</p>
+        </div>
+
+        <div class="sk-guide-block">
+          <p class="sk-guide-heading">Preparing your set</p>
+          <p class="sk-guide-text">Sample Kit exports audio between locators as WAV files.</p>
+          <ul class="sk-guide-list">
+            <li>Arrangement View</li>
+            <li>Audio tracks only</li>
+            <li>2+ locators, including an end locator</li>
+            <li>A saved set (for project exports)</li>
+          </ul>
+        </div>
+
+        <div class="sk-guide-block">
+          <p class="sk-guide-heading">Option 1 — Quick export</p>
+          <p class="sk-guide-sub">Does not include sends or master.</p>
+          <ol class="sk-guide-list sk-guide-list--ordered">
+            <li>Duplicate tracks or groups to export</li>
+            <li>Add locators (+ end locator after the last section)</li>
+            <li>Bounce duplicates in place</li>
+            <li>Right-click each bounced track → Export Locator Samples…</li>
+            <li>Choose preset and export</li>
+          </ol>
+        </div>
+
+        <div class="sk-guide-block">
+          <p class="sk-guide-heading">Option 2 — With sends &amp; master</p>
+          <p class="sk-guide-sub">Stem first, then export. Use when you want return and master in the sound.</p>
+          <ol class="sk-guide-list sk-guide-list--ordered">
+            <li>Export stems as you normally would</li>
+            <li>New Live set → add stems to Arrangement</li>
+            <li>Add locators (+ end locator)</li>
+            <li>Bounce in place if needed</li>
+            <li>Right-click each track → Export Locator Samples…</li>
+            <li>Choose preset and export</li>
+          </ol>
+        </div>
+
+        <hr class="sk-guide-divider">
+
+        <div class="sk-guide-block">
+          <p class="sk-guide-heading">Good to know</p>
+          <ul class="sk-guide-list">
+            <li>Exports use pre-FX audio (track devices are not included).</li>
+            <li>MIDI tracks must be frozen or flattened to audio before export.</li>
+            <li>Save your Live Set first. Project exports usually land in Samples/Imported/.</li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+
+    <div class="sk-main">
+      <div class="sk-main-header">
+        <button class="sk-close" id="closeBtn" type="button" aria-label="Close">×</button>
+      </div>
+
+      <div class="sk-main-body">
+        <div class="sk-alert" id="alert" hidden></div>
+
+        <section class="sk-panel-section">
+          <h2 class="sk-panel-heading">Source</h2>
+          <div class="sk-source-grid">
+            <div>
+              <span class="sk-field-label-inline">Song info</span>
+              <div class="sk-meta-line" id="meta"></div>
+            </div>
+            <div>
+              <span class="sk-field-label-inline">Track</span>
+              <div class="sk-meta-line" id="tracks"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sk-panel-section">
+          <h2 class="sk-panel-heading">Export settings</h2>
+          <div class="sk-export-layout">
+            <div>
+              <div class="sk-segment-header">
+                <span class="sk-field-label-inline">Segments</span>
+                <div class="sk-segment-actions">
+                  <button class="sk-segment-action" id="selectAllSegments" type="button">All</button>
+                  <button class="sk-segment-action" id="selectNoSegments" type="button">None</button>
+                </div>
+              </div>
+              <p class="sk-segment-summary" id="segmentSummary"></p>
+              <div class="sk-segment-list" id="segmentList"></div>
+            </div>
+            <div class="sk-config-fields">
+              <label class="sk-field" for="preset">
+                <span class="sk-field-label-inline">Preset</span>
+                <select class="sk-select" id="preset"></select>
+              </label>
+              <label class="sk-field" for="destination">
+                <span class="sk-field-label-inline">Save location</span>
+                <select class="sk-select" id="destination">
+                  <option value="project">Live Project Folder</option>
+                  <option value="storage">Extension Storage</option>
+                </select>
+              </label>
+              <p class="sk-hint">Save your set first. Project exports usually land in Samples/Imported/.</p>
+              <label class="sk-field" for="sampleRate">
+                <span class="sk-field-label-inline">Sample rate</span>
+                <select class="sk-select" id="sampleRate">
+                  <option value="44100">44100 Hz</option>
+                  <option value="48000">48000 Hz</option>
+                </select>
+              </label>
+              <label class="sk-field" for="bitDepth">
+                <span class="sk-field-label-inline">Bit depth</span>
+                <select class="sk-select" id="bitDepth">
+                  <option value="16">16-bit</option>
+                  <option value="24">24-bit</option>
+                  <option value="32">32-bit float</option>
+                </select>
+              </label>
+              <label class="sk-field" for="format">
+                <span class="sk-field-label-inline">File type</span>
+                <select class="sk-select" id="format">
+                  <option value="wav">WAV</option>
+                </select>
+              </label>
+              <label class="sk-checkbox-row" for="excludeSectionsWithoutClips">
+                <input class="sk-check" type="checkbox" id="excludeSectionsWithoutClips" checked>
+                <span>Exclude sections with no audio clips</span>
+              </label>
+              <p class="sk-hint">When checked, locator ranges with no arrangement clips on the selected track are skipped. When unchecked, every segment is rendered and exported.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="sk-main-footer">
+        <button class="sk-button sk-button--primary" id="exportBtn" type="button">Export</button>
+        <button class="sk-button sk-button--secondary" id="cancelBtn" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
